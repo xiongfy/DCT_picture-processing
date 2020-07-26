@@ -1,0 +1,306 @@
+%图像处理——DCT变换、量化、编码
+clc;clear;
+  
+Q =[16 11 10 16  24  40  51  61  %%采用JPEG亮度量化表 Q1
+    12 12 14 19  26  58  60  55
+    14 13 16 24  40  57  69  56
+    14 17 22 29  51  87  80  62
+    18 22 37 56  68 109 103  77
+    24 35 55 64  81 104 113  92
+    49 64 78 87 103 121 120 101
+    72 92 95 98 112 100 103 99];
+
+% Q=[8, 11, 23, 26, 50, 53, 89, 92  %%普通矩阵
+%    11, 20, 29, 47, 56, 86, 95, 134
+%    23, 29, 44, 59, 83, 98, 131, 137
+%    26, 47, 59, 80, 101, 128, 140, 167
+%    50, 56, 83, 101, 125, 143, 164, 170
+%    53, 86, 98, 128, 143, 161, 173, 188
+%    89, 95, 131, 140, 164, 173, 185, 191
+%    92, 134, 137, 167, 170, 188, 191, 197];
+
+% Q=[8, 11, 19, 26, 40, 53, 73, 92  %%对称性优化后的普通矩阵
+%    11, 20, 34, 47, 67, 86, 110, 134
+%    19, 34, 49, 64, 86, 107, 129, 151
+%    26, 47, 64, 80, 104, 128, 148, 167
+%    40, 67, 86, 104, 125, 145, 162, 178
+%    53, 86, 107, 128, 145, 161, 175, 188
+%    73, 110, 129, 148, 162, 175, 184, 193
+%    92, 134, 151, 167, 178, 188, 193, 197 ];
+
+% Q=[ 1,1,1,1,1,1,1,1   %%量化质量100
+%     1,1,1,1,1,1,1,1
+%     1,1,1,1,1,1,1,1
+%     1,1,1,1,1,1,1,1
+%     1,1,1,1,1,1,1,1
+%     1,1,1,1,1,1,1,1
+%     1,1,1,1,1,1,1,1
+%     1,1,1,1,1,1,1,1 ];
+
+% Q=[ 3,2,2,3,5,8,10,12    %%量化质量90
+%     2,2,3,4,5,12,12,11
+%     3,3,3,5,8,11,14,11
+%     3,3,4,6,10,17,16,12
+%     4,4,7,11,14,22,21,15
+%     5,7,11,13,16,21,23,18
+%     10,13,16,17,21,24,24,20
+%     14,18,19,20,22,20,21,20];
+
+% Q=[ 6, 4, 4, 6, 10, 16, 20, 24    %%量化质量80
+%     5,5,6,8,10,23,24,22
+%     6,5,6,10,16,23,28,22
+%     6,7,9,12,20,35,32,25
+%     7,9,15,22,27,44,41,31
+%     10,14,22,26,32,42,45,37
+%     20,26,31,35,41,48,48,40
+%     29,37,38,39,45,40,41,40];
+ 
+% Q=[13 9 8 13 19 32 41 49 %%量化质量60   
+%    10 10 11 15 21 46 48 44 
+%    11 10 13 19 32 46 55 45 
+%    11 14 18 23 41 70 64 50 
+%    14 18 30 45 54 87 82 62 
+%    19 28 44 51 65 83 90 74 
+%    39 51 62 70 82 97 96 81 
+%    58 74 76 78 90 80 82 79 ];
+
+% Q=[32,36,38,38,38,38,38,38     %%JEPG-HVS矩阵
+%    36,43,44,45,45,45,45,45
+%    38,44,46,46,46,46,46,46
+%    38,45,46,46,47,47,46,46
+%    38,45,46,47,46,46,46,46
+%    38,45,46,47,46,46,46,46
+%    38,45,46,46,46,46,46,46
+%    38,45,46,46,46,46,45,45]
+
+X = 8;%分块大小
+I=imread('C:\Users\Lenovo\Desktop\07.png');%读取图像
+gray_img = rgb2gray(I);%灰度化
+imhist(gray_img);
+Idouble=im2double(gray_img)%将图像转换为双精度格式
+t=dctmtx(8);
+
+I_DCT = blkproc(gray_img,[X X],'dct2');%对图像进行DCT变换,
+
+Iq = round(blkproc(I_DCT,[X X],'x./P1',Q));%量化处理
+disp(Iq);
+disp(min(min(Iq)));
+disp(max(max(Iq)));
+Iq = Iq + 272;%量化处理之后，序列的symbol取-120到+120之间，为了方便编码，将其平移到0-255的区间
+imshow(Iq/900);
+
+
+%哈夫曼编码
+[M,N] = size(Iq);
+I1 = Iq(:);
+P = zeros(1,901);
+for i = 0:900
+    P(i+1) = double(length(find(I1 == i))/(M*N));
+end
+
+
+%信源的熵
+H=0.0;
+for i=1:901
+    if P(i)~=0
+        H = H + P(i)*log2(1/P(i));
+    end
+end
+disp(strcat(['信源熵为' num2str(H)]));
+if sum(P)==1
+    disp("和为1");
+else
+    disp(sum(P));
+end
+
+
+%哈夫曼编码
+k = 0:900;
+[dict,avglen] = huffmandict(k,P); %生成字典
+enco = huffmanenco(I1,dict); %编码
+disp(strcat(['平均码长为' num2str(avglen)]));
+disp(strcat(['编码率为' num2str(H/avglen)]));
+%bitstream传输
+
+%计算编码长度
+binaryComp = de2bi(enco);%de2bi十进制转二进制
+encodedLen = numel(binaryComp);
+imgLen = numel(de2bi(I1));
+disp(strcat(['编码后传输的比特流长度为' num2str(encodedLen)]))
+disp(strcat(['原图片二进制编码比特长度为' num2str(imgLen)]))
+disp(strcat(['压缩比为' num2str(imgLen/encodedLen)]))
+
+%计算编码率
+%[h,e]=Huffman_code(P);
+
+
+%LZ编码
+fid=fopen('C:\Users\Lenovo\Desktop\07.png','r');
+seq=fread(fid);
+fclose(fid);
+[dictionary,codelength]=LZcode(I1);
+%编码
+enseq=LZencode(dictionary);
+fiden=fopen('C:\Users\Lenovo\Desktop\encode.txt','w');
+en=fwrite(fiden,enseq);
+fclose(fiden);
+%解码
+deseq=LZdecode(dictionary);
+
+
+%bitstream接收
+%哈夫曼解码
+deco = huffmandeco(enco,dict);
+
+Idq = col2im(deco,[M,N],[M,N],'distinct')-272; %把向量重新转换成图像块，记得要把图像平移回去原来的区间；
+
+I_rq =  round(blkproc(Idq,[X X],'x.*P1',Q));%反量化
+
+I_rDCT = round(blkproc(I_rq,[X X],'idct2'));%对图像进行DCT反变换
+
+%I_rDCT = Normalize(I_rDCT);%归一化到0-255区间
+
+
+figure;
+imshow(gray_img);
+
+figure;
+%将double类型的0~255数据转为uint8类型
+imshow(uint8(I_rDCT));title("压缩后的图像")
+
+subplot(1,1,1)
+imhist(uint8(I_rDCT));
+disp(I_rDCT);
+
+
+h = histogram(double(I_rDCT)-double(gray_img), (-50.5:1:50.5), 'Normalization', 'probability'); % 误差分布直方图
+    xlabel('绝对误差');
+    ylabel('频率(%)');
+    title(sprintf('误差分布直方图 压缩比C_r=%0.4f%', imgLen/encodedLen));
+
+%计算均方误差
+cha=abs(Idouble-I_rDCT/450);
+junfang=mse(cha);
+%xlabel({'均方误差：';junfang},'Fontsize',20)
+disp(strcat(['均方误差为' num2str(junfang)]));
+        
+
+function OutImg = Normalize(InImg)
+ymax=255;ymin=0;
+xmax = max(max(InImg)); %求得InImg中的最大值
+xmin = min(min(InImg)); %求得InImg中的最小值
+OutImg = round((ymax-ymin)*(InImg-xmin)/(xmax-xmin) + ymin); %归一化并取整
+end
+
+
+%创建字典
+function [dictionary,codelength]=LZcode(seq)
+    l=length(seq);
+    dictionary(1).sym=seq(1);
+    k=2;
+    index=0;
+    str='';
+    for i=2:l
+        str=[str,seq(i)];
+        for j=1:(k-1)
+            index=0;
+            if strcmp(dictionary(j).sym,str)
+                index=1;
+                break;
+            end
+        end
+        if index==0
+            dictionary(k).sym=str;
+            k=k+1;
+            str='';
+        end
+    end
+    codelength=fix(log2(k-1)+1);
+    for i=1:(k-1)
+        dictionary(i).code=dec2bin((i-1),codelength);
+    end
+end
+
+%进行编码
+function encode=LZencode(dictionary)
+    ld=length(dictionary);
+    encode='';
+    for i=1:ld
+        encode=[encode,dictionary(i).code];
+    end
+end
+
+%进行解码
+function decode=LZdecode(dictionary)
+    ld=length(dictionary);
+    decode='';
+    for i=1:ld
+        decode=[decode,dictionary(i).sym];
+    end
+end
+
+
+%p为概率分布，此函数功能是进行哈夫曼编码
+function [ h,e ] = Huffman_code( P )           % h为各个元素的麻子,e为输出的平均码长
+if length(find(P<0))~=0
+    error('概率不应该小于0！')
+end
+ 
+if abs(sum(P)-1)>10e-10
+    error('概率之和大于1，请检查输入！')
+end
+ 
+%n=length(P);
+
+P=sort(P);
+%统计信源符号个数
+num=0;
+for i =0:255
+    if (P(i+1)~=0 )
+        num = num + 1;
+    end
+end
+i=1;
+q=zeros(1,num);
+for j=1:256
+    if (P(j)~=0 )
+        q(i)=P(j);
+        i=i+1;
+    end
+end
+
+Q=q;
+disp(Q);
+n=length(q);
+    
+m=zeros(n-1,n);
+for i=1:n-1
+    [q,e]=sort(q); 
+    m(i,:)=[e(1:n-i+1),zeros(1,i-1)]; %由数组l 构建一个矩阵，该矩阵表明概率合并时的顺序，用于后面的编码
+    q=[q(1)+q(2),q(3:n),1]; 
+end
+ 
+for i=1:n-1
+    c(i,1:n*n)=blanks(n*n); %c 矩阵用于进行huffman 编码
+end
+    c(n-1,n)='1'; %由于a 矩阵的第n-1 行的前两个元素为进行huffman 编码加和运算时所得的最后两个概率(在本例中为0.02、0.08)，因此其值为0 或1
+    c(n-1,2*n)='0'; 
+for i=2:n-1
+    c(n-i,1:n-1)=c(n-i+1,n*(find(m(n-i+1,:)==1))-(n-2):n*(find(m(n-i+1,:)==1))); %矩阵c 的第n-i 的第一个元素的n-1 的字符赋值为对应于a 矩阵中第n-i+1 行中值为1 的位置在c 矩阵中的编码值
+    c(n-i,n)='0'; 
+    c(n-i,n+1:2*n-1)=c(n-i,1:n-1); %矩阵c 的第n-i 的第二个元素的n-1 的字符与第n-i 行的第一个元素的前n-1 个符号相同，因为其根节点相同
+    c(n-i,2*n)='1'; 
+    for j=1:i-1
+         c(n-i,(j+1)*n+1:(j+2)*n)=c(n-i+1,n*(find(m(n-i+1,:)==j+1)-1)+1:n*find(m(n-i+1,:)==j+1));
+            %矩阵c 中第n-i 行第j+1 列的值等于对应于a 矩阵中第n-i+1 行中值为j+1 的前面一个元素的位置在c 矩阵中的编码值
+    end
+end
+for i=1:n
+    h(i,1:n)=c(1,n*(find(m(1,:)==i)-1)+1:find(m(1,:)==i)*n); %用h表示最后的huffman 编码
+    len(i)=length(find(abs(h(i,:))~=32)); %计算每一个编码的长度
+end
+disp(h);
+%disp(len);
+e=sum(Q.*len);%平均码长
+disp(strcat(['平均码长' num2str(e)]));
+end
